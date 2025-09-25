@@ -12,9 +12,20 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- Custom CSS for a Slick Design ---
+# --- Custom CSS for Dark Theme Design ---
 st.markdown("""
 <style>
+    /* General body styling */
+    body {
+        color: #FAFAFA;
+        background-color: #0E1117;
+    }
+    .stApp {
+        background-color: #0E1117;
+    }
+    .stApp > header {
+        background-color: transparent;
+    }
     /* Main container styling */
     .main .block-container {
         padding-top: 2rem;
@@ -23,33 +34,38 @@ st.markdown("""
         padding-right: 5rem;
     }
     /* Style for the card-like container */
-    .stApp > header {
-        background-color: transparent;
-    }
-    .stApp {
-        background-color: #f0f2f6; /* Light gray background */
-    }
     .card {
-        background-color: white;
+        background-color: #262730;
         border-radius: 10px;
         padding: 25px;
-        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
-        transition: 0.3s;
-    }
-    .card:hover {
-        box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.3);
+        border: 1px solid #444;
     }
     /* Button styling */
     .stButton>button {
         color: white;
-        background-color: #4CAF50; /* Green */
+        background-color: #007BFF; /* Primary blue accent */
         border-radius: 8px;
         padding: 10px 24px;
         border: none;
         font-size: 16px;
+        font-weight: bold;
     }
     .stButton>button:hover {
-        background-color: #45a049;
+        background-color: #0056b3; /* Darker blue on hover */
+        color: white;
+    }
+    /* Text Area styling */
+    .stTextArea textarea {
+        background-color: #1a1c23;
+        color: #FAFAFA;
+        border: 1px solid #444;
+    }
+    /* Success box styling */
+    .stAlert[data-baseweb="alert"] {
+        background-color: #1f2b37;
+        color: #FAFAFA;
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -65,7 +81,6 @@ def load_assets():
     return model, tokenizer
 
 model, tokenizer = load_assets()
-# Ensure sequence_length is correctly retrieved from the model's input layer
 sequence_length = model.input_shape[1]
 
 
@@ -88,7 +103,8 @@ def generate_text(seed_text, next_words, model, tokenizer, max_sequence_len):
         
         output_text += " " + output_word
         
-    return output_text.title() # Using .title() for a story-like capitalization
+    return output_text.title()
+
 
 # --- App Layout and UI ---
 
