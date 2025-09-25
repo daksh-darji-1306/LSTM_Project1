@@ -1,154 +1,133 @@
 import streamlit as st
 import numpy as np
+import pickle
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-import joblib
-import plotly.graph_objects as go
-import os
 
-# --- Configuration ---
-MODEL_FILE = 'customer_journey_lstm.h5'
-ENCODER_FILE = 'event_encoder.pkl'
-SEQUENCE_LENGTH = 10
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="AI Storyteller",
+    page_icon="✍️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# --- Asset Loading ---
-@st.cache_resource
-def load_prediction_assets():
-    """Loads and validates the trained model and label encoder."""
-    if not all(os.path.exists(f) for f in [MODEL_FILE, ENCODER_FILE]):
-        return None, None
-    try:
-        model = load_model(MODEL_FILE)
-        encoder = joblib.load(ENCODER_FILE)
-        return model, encoder
-    except Exception as e:
-        st.error(f"Error loading prediction assets: {e}")
-        return None, None
-
-# --- UI Setup ---
-st.set_page_config(page_title="Customer Journey Predictor", layout="wide", initial_sidebar_state="collapsed")
-model, encoder = load_prediction_assets()
-
-# --- Professional Dark Theme CSS ---
+# --- Custom CSS for a Slick Design ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    
-    html, body, [class*="st-"] {
-        font-family: 'Inter', sans-serif;
+    /* Main container styling */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 5rem;
+        padding-right: 5rem;
+    }
+    /* Style for the card-like container */
+    .stApp > header {
+        background-color: transparent;
     }
     .stApp {
-        background-color: #0d1117;
-        color: #c9d1d9;
+        background-color: #f0f2f6; /* Light gray background */
     }
-    .main {
-        background-color: #0d1117;
-    }
-    .card-container {
-        background-color: #161b22;
+    .card {
+        background-color: white;
         border-radius: 10px;
-        padding: 2rem;
-        border: 1px solid #30363d;
+        padding: 25px;
+        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+        transition: 0.3s;
     }
+    .card:hover {
+        box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+    }
+    /* Button styling */
     .stButton>button {
-        background-color: #238636;
         color: white;
-        font-weight: 600;
+        background-color: #4CAF50; /* Green */
         border-radius: 8px;
-        border: 1px solid #30363d;
-        padding: 12px 0;
-        width: 100%;
-        transition: background-color 0.3s ease, border-color 0.3s ease;
+        padding: 10px 24px;
+        border: none;
+        font-size: 16px;
     }
     .stButton>button:hover {
-        background-color: #2ea043;
-        border-color: #8b949e;
-    }
-    h1, h2, h3 { color: #f0f6fc !important; }
-    .stMarkdown, p, .stMultiSelect { color: #c9d1d9; }
-    .prediction-card {
-        background-color: #0d1117;
-        border: 1px solid #30363d;
-        border-left: 5px solid #2ea043;
-        border-radius: 10px;
-        padding: 1.5rem 2rem;
-        text-align: center;
+        background-color: #45a049;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Main Application Logic ---
-if model is not None and encoder is not None:
-    st.title("🛒 E-commerce Customer Journey Predictor")
-    st.markdown("<p style='font-size: 1.1rem; color: #8b949e;'>Select a sequence of customer actions to predict the most likely next event.</p>", unsafe_allow_html=True)
-    st.markdown("---")
 
-    with st.container():
-        st.markdown("<div class='card-container'>", unsafe_allow_html=True)
-        st.header("Customer's Current Journey")
+# --- Caching the Model and Tokenizer for Performance ---
+@st.cache_resource
+def load_assets():
+    """Loads the trained model and tokenizer from disk."""
+    model = load_model('next_word_model.h5')
+    with open('tokenizer.pickle', 'rb') as handle:
+        tokenizer = pickle.load(handle)
+    return model, tokenizer
+
+model, tokenizer = load_assets()
+# Ensure sequence_length is correctly retrieved from the model's input layer
+sequence_length = model.input_shape[1]
+
+
+# --- Text Generation Function ---
+def generate_text(seed_text, next_words, model, tokenizer, max_sequence_len):
+    """Generates text using the trained LSTM model."""
+    output_text = seed_text
+    for _ in range(next_words):
+        token_list = tokenizer.texts_to_sequences([output_text])[0]
+        token_list = pad_sequences([token_list], maxlen=max_sequence_len, padding='pre')
         
-        event_options = list(encoder.classes_)
+        predicted_probs = model.predict(token_list, verbose=0)[0]
+        predicted_index = np.argmax(predicted_probs)
         
-        # User input for the sequence of events
-        journey_sequence = st.multiselect(
-            "Select the sequence of events in chronological order.",
-            options=event_options,
-            default=[event_options[0], event_options[0]] # Default to two 'view' events
-        )
+        output_word = ""
+        for word, index in tokenizer.word_index.items():
+            if index == predicted_index:
+                output_word = word
+                break
         
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.write("")
-        _, col_btn, _ = st.columns([2.2, 1, 2.2])
-        predict_button = col_btn.button("Predict Next Action")
-
-    if predict_button and journey_sequence:
-        st.markdown("---")
-        st.header("Prediction Result")
-
-        # Prepare the input for the model
-        encoded_sequence = encoder.transform(journey_sequence)
-        padded_sequence = pad_sequences([encoded_sequence], maxlen=SEQUENCE_LENGTH - 1, padding='pre')
-
-        # Make prediction
-        prediction_probabilities = model.predict(padded_sequence)[0]
-        predicted_class_index = np.argmax(prediction_probabilities)
-        predicted_event = encoder.inverse_transform([predicted_class_index])[0]
+        output_text += " " + output_word
         
-        with st.container():
-            st.markdown("<div class='card-container'>", unsafe_allow_html=True)
-            res_cols = st.columns([1, 1.5], gap="large")
+    return output_text.title() # Using .title() for a story-like capitalization
+
+# --- App Layout and UI ---
+
+# Header
+st.title("✍️ AI Storyteller")
+st.markdown("Your creative partner for writing. Powered by an LSTM model trained on *Alice's Adventures in Wonderland*.")
+st.divider()
+
+# Main content within a styled container
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    
+    st.subheader("Start Your Story...")
+    
+    # Input fields
+    seed_text = st.text_area(
+        "Enter a starting phrase:", 
+        "The Duchess took her choice, and was gone in a moment",
+        height=100
+    )
+    
+    num_words = st.slider(
+        "How many words would you like to generate?",
+        min_value=10, max_value=200, value=50, step=10
+    )
+    
+    # Generate button and output
+    if st.button("Generate Text"):
+        if seed_text:
+            with st.spinner("The AI is thinking..."):
+                generated_sentence = generate_text(seed_text, num_words, model, tokenizer, sequence_length)
+                st.divider()
+                st.subheader("📜 Here is your generated story:")
+                st.success(generated_sentence)
+        else:
+            st.warning("Please enter a starting phrase to begin.")
             
-            with res_cols[0]:
-                st.markdown(f"""
-                <div class="prediction-card">
-                    <p style="color: #8b949e; font-size: 1.1rem; font-weight: 600;">PREDICTED NEXT ACTION</p>
-                    <h2 style="color: #f0f6fc; font-size: 2.5rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px;">{predicted_event}</h2>
-                </div>
-                """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-            with res_cols[1]:
-                # Create a bar chart for probabilities
-                fig = go.Figure([go.Bar(
-                    x=list(encoder.classes_), 
-                    y=prediction_probabilities,
-                    marker_color='#238636'
-                )])
-                fig.update_layout(
-                    title_text='Prediction Probabilities',
-                    xaxis_title="Event Type",
-                    yaxis_title="Probability",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font_color="#c9d1d9",
-                    title_font_color="#f0f6fc"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-    elif predict_button and not journey_sequence:
-        st.warning("Please select at least one event in the customer journey.")
-
-else:
-    st.error("Model assets not found. Please run `train.py` first to generate the required model and encoder files.")
+# Footer
+st.markdown("---")
+st.markdown("Built with ❤️ using Streamlit and TensorFlow.")

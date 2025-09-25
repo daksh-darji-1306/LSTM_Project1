@@ -1,7 +1,4 @@
-pandas
-numpy
-scikit-learn
-tensorflow
-streamlit
-joblib
-plotly
+streamlit==1.38.0
+tensorflow==2.15.0
+numpy==1.26.4
+requests==2.31.0
